@@ -4,13 +4,13 @@
 # Set base URL
 $BASE_URL = "http://localhost:3000"
 
-Write-Host "🧪 Testing Reports API" -ForegroundColor Cyan
+Write-Host "Testing Reports API" -ForegroundColor Cyan
 Write-Host ""
 
 # Step 1: Health Check
 Write-Host "1. Health Check" -ForegroundColor Yellow
 $health = Invoke-RestMethod -Uri "$BASE_URL/health" -Method Get
-Write-Host "✓ Server is healthy" -ForegroundColor Green
+Write-Host "Server is healthy" -ForegroundColor Green
 Write-Host ""
 
 # Step 2: Generate Editor Token
