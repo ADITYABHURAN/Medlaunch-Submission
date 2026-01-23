@@ -3,13 +3,10 @@ import {
   Report,
   CreateReportInput,
   UpdateReportInput,
-  ComputedReportFields,
-  Entry,
   AuditLogEntry,
   Attachment,
 } from '../models/report.model';
 import { AppError } from '../utils/errors';
-import { jobQueue } from './jobQueue.service';
 import logger from '../utils/logger';
 
 export class ReportService {
@@ -31,13 +28,6 @@ export class ReportService {
       auditLog: [auditEntry],
     });
 
-    // Trigger async job
-    await jobQueue.enqueue('report-created', {
-      reportId: updatedReport.id,
-      userId,
-      title: updatedReport.title,
-    });
-
     return updatedReport;
   }
 
@@ -57,19 +47,9 @@ export class ReportService {
     id: string,
     updates: UpdateReportInput,
     userId: string,
-    userRole: 'reader' | 'editor',
-    version?: number,
-    idempotencyKey?: string
+    userRole: 'reader' | 'editor'
   ): Promise<Report> {
     const existing = await this.getReportById(id);
-
-    // Optimistic concurrency control
-    if (version !== undefined && existing.version !== version) {
-      throw new AppError(409, 'VERSION_CONFLICT', 'Report has been modified by another user', {
-        currentVersion: existing.version,
-        providedVersion: version,
-      });
-    }
 
     // Business Rule: FINALIZED status protection
     if (existing.status === 'finalized') {
@@ -88,7 +68,7 @@ export class ReportService {
       });
     }
 
-    // Prepare audit log entry
+    // Create audit log entry
     const auditEntry: AuditLogEntry = {
       timestamp: new Date().toISOString(),
       userId,
@@ -97,20 +77,14 @@ export class ReportService {
         title: existing.title,
         status: existing.status,
         description: existing.description,
-        metadata: existing.metadata,
-        tags: existing.tags,
       },
       after: updates,
-      metadata: {
-        forced: updates.force || false,
-        idempotencyKey,
-      },
     };
 
     // Remove force flag from actual updates
     const { force, ...actualUpdates } = updates;
 
-    // Append audit log
+    // Update report with new audit log
     const newAuditLog = [...existing.auditLog, auditEntry];
 
     const updated = db.update(id, {
@@ -118,29 +92,18 @@ export class ReportService {
       auditLog: newAuditLog,
     });
 
-    // Trigger async job
-    await jobQueue.enqueue('report-updated', {
-      reportId: updated.id,
-      userId,
-      changes: actualUpdates,
-    });
-
     return updated;
   }
 
-  // Get report with view options
+  // Get report with optional filtering
   async getReportWithView(
     id: string,
     view?: string,
-    include?: string[],
-    entriesPage?: number,
-    entriesSize?: number,
-    sortBy?: string,
-    filterPriority?: string
+    include?: string[]
   ): Promise<any> {
     const report = await this.getReportById(id);
 
-    // Summary view
+    // Summary view - just basic info
     if (view === 'summary') {
       return {
         id: report.id,
@@ -149,16 +112,13 @@ export class ReportService {
         ownerId: report.ownerId,
         createdAt: report.createdAt,
         updatedAt: report.updatedAt,
-        ...this.computeFields(report),
+        totalEntries: report.entries.length,
       };
     }
 
-    // Process includes
-    let result: any = { ...report };
-
+    // If include is specified, return only those fields
     if (include && include.length > 0) {
-      // Start with base fields
-      result = {
+      const result: any = {
         id: report.id,
         title: report.title,
         status: report.status,
@@ -168,128 +128,30 @@ export class ReportService {
         version: report.version,
       };
 
-      // Add requested fields
       if (include.includes('entries')) {
-        result.entries = this.filterAndPaginateEntries(
-          report.entries,
-          entriesPage,
-          entriesSize,
-          sortBy,
-          filterPriority
-        );
+        result.entries = report.entries;
       }
-
-      if (include.includes('metrics')) {
-        result.metrics = this.computeFields(report);
-      }
-
       if (include.includes('comments')) {
         result.comments = report.comments;
       }
-
       if (include.includes('attachments')) {
         result.attachments = report.attachments;
       }
-
       if (include.includes('metadata')) {
         result.metadata = report.metadata;
       }
-
       if (include.includes('tags')) {
         result.tags = report.tags;
       }
-
       if (include.includes('auditLog')) {
         result.auditLog = report.auditLog;
       }
-    } else {
-      // Default: full report with paginated entries
-      result.entries = this.filterAndPaginateEntries(
-        report.entries,
-        entriesPage,
-        entriesSize,
-        sortBy,
-        filterPriority
-      );
+
+      return result;
     }
 
-    return result;
-  }
-
-  // Compute derived fields
-  private computeFields(report: Report): ComputedReportFields {
-    const totalEntries = report.entries.length;
-    const completedEntries = report.entries.filter((e: Entry) => e.status === 'completed').length;
-    
-    // Recent activity: entries from last 7 days
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentActivityCount = report.entries.filter(
-      (e: Entry) => new Date(e.timestamp) > sevenDaysAgo
-    ).length;
-
-    const highPriorityCount = report.entries.filter(
-      (e: Entry) => e.priority === 'high' || e.priority === 'critical'
-    ).length;
-
-    // Average completion time (mock calculation)
-    const completedEntriesWithTime = report.entries.filter((e: Entry) => e.status === 'completed');
-    let averageCompletionTime: number | undefined;
-    
-    if (completedEntriesWithTime.length > 0) {
-      // Mock: 24 hours average for all completed entries
-      averageCompletionTime = 24;
-    }
-
-    return {
-      totalEntries,
-      completedEntries,
-      recentActivityCount,
-      highPriorityCount,
-      averageCompletionTime,
-    };
-  }
-
-  // Filter and paginate entries
-  private filterAndPaginateEntries(
-    entries: Entry[],
-    page?: number,
-    size?: number,
-    sortBy?: string,
-    filterPriority?: string
-  ): any {
-    let filtered = [...entries];
-
-    // Filter by priority
-    if (filterPriority) {
-      filtered = filtered.filter((e: Entry) => e.priority === filterPriority);
-    }
-
-    // Sort
-    if (sortBy === 'priority') {
-      const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-      filtered.sort((a: Entry, b: Entry) => priorityOrder[a.priority] - priorityOrder[b.priority]);
-    } else if (sortBy === 'recency' || sortBy === 'timestamp') {
-      filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }
-
-    // Paginate
-    if (page !== undefined && size !== undefined) {
-      const start = page * size;
-      const end = start + size;
-      const paginatedEntries = filtered.slice(start, end);
-
-      return {
-        data: paginatedEntries,
-        pagination: {
-          page,
-          size,
-          total: filtered.length,
-          totalPages: Math.ceil(filtered.length / size),
-        },
-      };
-    }
-
-    return filtered;
+    // Default: return full report
+    return report;
   }
 
   // Add attachment to report
@@ -299,12 +161,6 @@ export class ReportService {
     const updatedAttachments = [...report.attachments, attachment];
     const updated = db.update(reportId, {
       attachments: updatedAttachments,
-    });
-
-    // Trigger async job
-    await jobQueue.enqueue('attachment-uploaded', {
-      reportId: updated.id,
-      attachmentId: attachment.id,
     });
 
     return updated;

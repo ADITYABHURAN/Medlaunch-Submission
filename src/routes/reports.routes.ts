@@ -11,13 +11,7 @@ import multer from 'multer';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Idempotency tracking
-const idempotencyCache = new Map<string, any>();
-
-/**
- * GET /reports/:id
- * Retrieve a report with flexible view options
- */
+// GET /reports/:id - Get a report
 router.get(
   '/:id',
   authenticate,
@@ -29,20 +23,8 @@ router.get(
       const include = req.query.include
         ? (req.query.include as string).split(',')
         : undefined;
-      const entriesPage = req.query.page ? parseInt(req.query.page as string, 10) : undefined;
-      const entriesSize = req.query.size ? parseInt(req.query.size as string, 10) : undefined;
-      const sortBy = req.query.sortBy as string | undefined;
-      const filterPriority = req.query.filterPriority as string | undefined;
 
-      const report = await reportService.getReportWithView(
-        id,
-        view,
-        include,
-        entriesPage,
-        entriesSize,
-        sortBy,
-        filterPriority
-      );
+      const report = await reportService.getReportWithView(id, view, include);
 
       return res.json(report);
     } catch (error) {
@@ -51,10 +33,7 @@ router.get(
   }
 );
 
-/**
- * PUT /reports/:id
- * Update a report with optimistic concurrency and idempotency
- */
+// PUT /reports/:id - Update a report
 router.put(
   '/:id',
   authenticate,
@@ -62,16 +41,6 @@ router.put(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-      const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
-      const version = req.headers['if-match'] ? parseInt(req.headers['if-match'] as string, 10) : undefined;
-
-      // Check idempotency
-      if (idempotencyKey) {
-        const cached = idempotencyCache.get(idempotencyKey);
-        if (cached) {
-          return res.json(cached);
-        }
-      }
 
       // Validate input
       const validated = UpdateReportSchema.parse(req.body);
@@ -80,17 +49,8 @@ router.put(
         id,
         validated,
         req.user!.userId,
-        req.user!.role,
-        version,
-        idempotencyKey
+        req.user!.role
       );
-
-      // Cache result for idempotency
-      if (idempotencyKey) {
-        idempotencyCache.set(idempotencyKey, updated);
-        // Clean up after 24 hours
-        setTimeout(() => idempotencyCache.delete(idempotencyKey), 24 * 60 * 60 * 1000);
-      }
 
       return res.json(updated);
     } catch (error: any) {
@@ -103,10 +63,7 @@ router.put(
   }
 );
 
-/**
- * POST /reports
- * Create a new report
- */
+// POST /reports - Create a new report
 router.post(
   '/',
   authenticate,
@@ -131,10 +88,7 @@ router.post(
   }
 );
 
-/**
- * POST /reports/:id/attachment
- * Upload an attachment to a report
- */
+// POST /reports/:id/attachment - Upload an attachment
 router.post(
   '/:id/attachment',
   authenticate,
@@ -148,10 +102,8 @@ router.post(
         throw new AppError(400, 'NO_FILE', 'No file provided');
       }
 
-      // Validate file
+      // Validate and store file
       fileStorage.validateFile(req.file);
-
-      // Store file
       const stored = await fileStorage.store(req.file);
 
       // Generate download token
@@ -185,10 +137,7 @@ router.post(
   }
 );
 
-/**
- * GET /reports/:id/attachments/:attachmentId/download
- * Download an attachment with token validation
- */
+// GET /reports/:id/attachments/:attachmentId/download - Download attachment
 router.get(
   '/:id/attachments/:attachmentId/download',
   async (req: Request, res: Response, next: NextFunction) => {
@@ -218,7 +167,7 @@ router.get(
         throw new AppError(403, 'FORBIDDEN', 'Token does not match attachment');
       }
 
-      // Retrieve file
+      // Retrieve and send file
       const fileBuffer = await fileStorage.retrieve(storageKey);
 
       res.setHeader('Content-Type', attachment.mimeType);

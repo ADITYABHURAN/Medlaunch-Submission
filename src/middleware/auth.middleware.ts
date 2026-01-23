@@ -11,6 +11,7 @@ declare global {
   }
 }
 
+// Check if user has valid JWT token
 export const authenticate = (req: Request, _res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;
@@ -22,13 +23,9 @@ export const authenticate = (req: Request, _res: Response, next: NextFunction) =
     const token = authHeader.substring(7);
     const secret = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
-    try {
-      const decoded = jwt.verify(token, secret) as JWTPayload;
-      req.user = decoded;
-      next();
-    } catch (error) {
-      throw new AppError(401, 'INVALID_TOKEN', 'Invalid or expired token');
-    }
+    const decoded = jwt.verify(token, secret) as JWTPayload;
+    req.user = decoded;
+    next();
   } catch (error) {
     next(error);
   }
