@@ -4,8 +4,10 @@
   "description": "Production-quality backend API for report management",
   "main": "src/index.ts",
   "scripts": {
-    "start": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts"
+    "start": "ts-node src/index.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "prod": "node dist/index.js"
   },
   "keywords": ["api", "reports", "typescript", "nodejs"],
   "author": "",
