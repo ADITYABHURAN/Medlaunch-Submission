@@ -1,314 +1,206 @@
 # Reports API
 
-A backend API for report management built with Node.js, TypeScript, and Express.
+A production-ready backend API for report management with role-based access control, file uploads, and audit logging.
 
 ## Features
 
-- JWT-based authentication with role-based authorization
-- Report management with nested entries
-- File upload with secure download tokens
-- Flexible querying with views, filtering, and pagination
-- Audit logging for all changes
-- Input validation with Zod schemas
-- Structured logging
-
-## Project Structure
-
-```
-src/
-├── database/
-│   └── inMemoryDb.ts          # In-memory NoSQL-style data store
-├── middleware/
-│   ├── auth.middleware.ts     # JWT authentication
-│   ├── authorization.middleware.ts  # Role-based access control
-│   └── error.middleware.ts    # Centralized error handling
-├── models/
-│   ├── report.model.ts        # Report domain model & Zod schemas
-│   └── user.model.ts          # User model & JWT payload
-├── routes/
-│   ├── auth.routes.ts         # Authentication endpoints
-│   └── reports.routes.ts      # Report CRUD endpoints
-├── services/
-│   ├── report.service.ts      # Business logic layer
-│   ├── fileStorage.service.ts # File storage abstraction
-│   └── jobQueue.service.ts    # Async job processing
-├── utils/
-│   ├── logger.ts              # Winston logger configuration
-│   ├── requestLogger.ts       # Request/response logging
-│   └── errors.ts              # Error handling utilities
-└── index.ts                   # Application entry point
-```
+- 🔐 JWT-based authentication with role-based authorization (Reader/Editor)
+- 📊 Report management with nested entries, comments, and attachments
+- 📎 Secure file uploads with time-limited download tokens
+- 🔍 Flexible querying with views and filtering
+- 📝 Complete audit trail for all changes
+- 🛡️ Input validation with Zod schemas
+- ⚡ Concurrency control with optimistic locking
 
 ## Quick Start
 
-1. Install dependencies:
+### 1. Install Dependencies
 ```bash
 npm install
 ```
 
-2. Start the server:
+### 2. Start the Server
 ```bash
 npm run dev
 ```
 
 Server runs on `http://localhost:3000`
 
-## API Documentation
-
-### Authentication
-
-#### Generate Token
+### 3. Verify Server is Running
 ```bash
-curl -X POST http://localhost:3000/auth/token \
-  -H "Content-Type: application/json" \
-  -d "{\"username\": \"john_editor\", \"role\": \"editor\"}"
+curl http://localhost:3000/health
 ```
 
-Response:
+## Authentication
+
+### Get a Test Token
+
+Generate tokens for testing (no registration required):
+
+```bash
+# Editor role (can create/update reports)
+curl -X POST http://localhost:3000/auth/token \
+  -H "Content-Type: application/json" \
+  -d "{\"username\": \"editor_user\", \"role\": \"editor\"}"
+
+# Reader role (can only view reports)
+curl -X POST http://localhost:3000/auth/token \
+  -H "Content-Type: application/json" \
+  -d "{\"username\": \"reader_user\", \"role\": \"reader\"}"
+```
+
+**Response:**
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "expiresIn": "24h",
   "user": {
     "userId": "user-1234567890",
-    "username": "john_editor",
+    "username": "editor_user",
     "role": "editor"
   }
 }
 ```
 
-Save the token for subsequent requests:
+**Save your token:**
 ```bash
-set TOKEN=<your-token-here>
+# Windows PowerShell
+$TOKEN = "your-token-here"
+
+# Linux/Mac
+export TOKEN="your-token-here"
 ```
 
-### Reports
+## API Endpoints
 
-#### 1. Create a Report (POST /reports)
-
+### 1. Create a Report
 ```bash
 curl -X POST http://localhost:3000/reports \
-  -H "Authorization: Bearer %TOKEN%" \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"title\": \"Q4 Sales Report\", \"ownerId\": \"user-123\", \"description\": \"Quarterly sales analysis\", \"status\": \"draft\", \"tags\": [\"sales\", \"q4\"]}"
+  -d "{\"title\": \"Q4 Sales Report\", \"ownerId\": \"user-123\", \"description\": \"Quarterly analysis\", \"status\": \"draft\"}"
 ```
 
-Response (201 Created):
-```json
-{
-  "id": "report-uuid",
-  "title": "Q4 Sales Report",
-  "status": "draft",
-  "ownerId": "user-123",
-  "description": "Quarterly sales analysis",
-  "tags": ["sales", "q4"],
-  "createdAt": "2026-01-21T10:00:00.000Z",
-  "updatedAt": "2026-01-21T10:00:00.000Z",
-  "version": 1,
-  "entries": [],
-  "comments": [],
-  "attachments": [],
-  "auditLog": [...]
-}
-```
-
-#### 2. Get Report - Full View (GET /reports/:id)
-
+### 2. Get a Report
 ```bash
-curl http://localhost:3000/reports/<report-id> \
-  -H "Authorization: Bearer %TOKEN%"
+curl http://localhost:3000/reports/{report-id} \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
-#### 3. Get Report - Summary View
-
+### 3. Update a Report
 ```bash
-curl "http://localhost:3000/reports/<report-id>?view=summary" \
-  -H "Authorization: Bearer %TOKEN%"
-```
-
-Response:
-```json
-{
-  "id": "report-uuid",
-  "title": "Q4 Sales Report",
-  "status": "draft",
-  "ownerId": "user-123",
-  "createdAt": "2026-01-21T10:00:00.000Z",
-  "updatedAt": "2026-01-21T10:00:00.000Z",
-  "totalEntries": 0,
-  "completedEntries": 0,
-  "recentActivityCount": 0,
-  "highPriorityCount": 0
-}
-```
-
-#### 4. Get Report with Specific Fields
-
-```bash
-curl "http://localhost:3000/reports/<report-id>?include=entries,metrics,tags" \
-  -H "Authorization: Bearer %TOKEN%"
-```
-
-#### 5. Get Report with Paginated Entries
-
-```bash
-curl "http://localhost:3000/reports/<report-id>?page=0&size=10&sortBy=priority&filterPriority=high" \
-  -H "Authorization: Bearer %TOKEN%"
-```
-
-Response:
-```json
-{
-  "id": "report-uuid",
-  "entries": {
-    "data": [...],
-    "pagination": {
-      "page": 0,
-      "size": 10,
-      "total": 25,
-      "totalPages": 3
-    }
-  }
-}
-```
-
-#### 6. Update Report (PUT /reports/:id)
-
-Basic update:
-```bash
-curl -X PUT http://localhost:3000/reports/<report-id> \
-  -H "Authorization: Bearer %TOKEN%" \
-  -H "Content-Type: application/json" \
-  -d "{\"status\": \"in_progress\", \"tags\": [\"sales\", \"q4\", \"updated\"]}"
-```
-
-With optimistic concurrency control:
-```bash
-curl -X PUT http://localhost:3000/reports/<report-id> \
-  -H "Authorization: Bearer %TOKEN%" \
-  -H "If-Match: 1" \
+curl -X PUT http://localhost:3000/reports/{report-id} \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"status\": \"in_progress\"}"
 ```
 
-With idempotency:
+### 4. Upload an Attachment
 ```bash
-curl -X PUT http://localhost:3000/reports/<report-id> \
-  -H "Authorization: Bearer %TOKEN%" \
-  -H "Idempotency-Key: unique-key-123" \
-  -H "Content-Type: application/json" \
-  -d "{\"status\": \"in_progress\"}"
+curl -X POST http://localhost:3000/reports/{report-id}/attachment \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@document.pdf"
 ```
 
-Forcing update on finalized report (editor only):
+### 5. Download an Attachment
 ```bash
-curl -X PUT http://localhost:3000/reports/<report-id> \
-  -H "Authorization: Bearer %TOKEN%" \
+curl "http://localhost:3000/reports/{report-id}/attachments/{attachment-id}/download?token={download-token}" \
+  --output file.pdf
+```
+
+> 💡 **Note:** Download tokens expire after 60 minutes and are returned when uploading attachments.
+
+## Roles & Permissions
+
+| Role | Can View Reports | Can Create Reports | Can Update Reports | Can Upload Files |
+|------|-----------------|-------------------|-------------------|------------------|
+| **Reader** | ✅ | ❌ | ❌ | ❌ |
+| **Editor** | ✅ | ✅ | ✅ | ✅ |
+
+### Special Rules
+
+- **Finalized Reports**: Only editors can modify finalized reports, and must include `"force": true` in the request
+- **Download Tokens**: Valid for 60 minutes from creation, can be used by anyone with the token
+
+## Custom Business Rule: Finalized Report Protection
+
+Reports with `status: "finalized"` are protected from modification to ensure data integrity. 
+
+**To edit a finalized report:**
+1. Must have `editor` role
+2. Must include `"force": true` in the update request
+3. Edit is logged in the audit trail with a warning
+
+**Example:**
+```bash
+curl -X PUT http://localhost:3000/reports/{report-id} \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"title\": \"Updated Title\", \"force\": true}"
 ```
 
-#### 7. Update Report with Entries
+## Report Fields
 
-```bash
-curl -X PUT http://localhost:3000/reports/<report-id> \
-  -H "Authorization: Bearer %TOKEN%" \
-  -H "Content-Type: application/json" \
-  -d "{\"entries\": [{\"id\": \"entry-1\", \"priority\": \"high\", \"timestamp\": \"2026-01-21T10:00:00.000Z\", \"value\": {\"amount\": 1000}, \"status\": \"active\", \"notes\": \"Important entry\"}]}"
-```
+### Required Fields
+- `title` (string, 1-200 characters)
+- `ownerId` (string)
 
-#### 8. Upload Attachment (POST /reports/:id/attachment)
+### Optional Fields
+- `status` (enum: draft | in_progress | under_review | finalized | archived) - defaults to "draft"
+- `description` (string)
+- `metadata` (object)
+- `tags` (string array)
 
-```bash
-curl -X POST http://localhost:3000/reports/<report-id>/attachment \
-  -H "Authorization: Bearer %TOKEN%" \
-  -F "file=@path/to/your/file.pdf"
-```
-
-Response (201 Created):
-```json
-{
-  "attachment": {
-    "id": "attachment-uuid",
-    "filename": "storage-filename.pdf",
-    "originalName": "file.pdf",
-    "mimeType": "application/pdf",
-    "size": 12345,
-    "uploadedAt": "2026-01-21T10:00:00.000Z",
-    "uploadedBy": "user-123",
-    "storageKey": "storage-key",
-    "downloadToken": "secure-token",
-    "tokenExpiresAt": "2026-01-21T11:00:00.000Z"
-  },
-  "downloadUrl": "/reports/<report-id>/attachments/<attachment-id>/download?token=secure-token"
-}
-```
-
-#### 9. Download Attachment
-
-```bash
-curl "http://localhost:3000/reports/<report-id>/attachments/<attachment-id>/download?token=<download-token>" \
-  --output downloaded-file.pdf
-```
-
-### Error Responses
-
-All errors follow a consistent format:
-
-```json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "details": {},
-    "requestId": "uuid"
-  }
-}
-```
-
-Common error codes:
-- `UNAUTHORIZED` (401): Missing or invalid authentication
-- `FORBIDDEN` (403): Insufficient permissions
-- `REPORT_NOT_FOUND` (404): Report does not exist
-- `VALIDATION_ERROR` (400): Invalid input data
-- `VERSION_CONFLICT` (409): Concurrent modification detected
-- `DUPLICATE_REPORT` (409): Report with same title and owner exists
-- `FORCE_REQUIRED` (400): Finalized report edit requires force=true
-
-## Business Rules
-
-### FINALIZED Status Protection
-
-Reports with `finalized` status cannot be edited unless:
-1. The user has the `editor` role
-2. The request includes `"force": true` in the body
-
-All forced edits are logged in the audit trail.
-
-Example:
-```bash
-# This will fail without force=true
-curl -X PUT http://localhost:3000/reports/<finalized-report-id> \
-  -H "Authorization: Bearer %TOKEN%" \
-  -H "Content-Type: application/json" \
-  -d "{\"title\": \"New Title\"}"
-
-# This will succeed
-curl -X PUT http://localhost:3000/reports/<finalized-report-id> \
-  -H "Authorization: Bearer %TOKEN%" \
-  -H "Content-Type: application/json" \
-  -d "{\"title\": \"New Title\", \"force\": true}"
-```
+### Entry Fields (nested in reports)
+- `id` (string, required)
+- `priority` (enum: low | medium | high | critical, required)
+- `timestamp` (ISO datetime, required)
+- `value` (any, required)
+- `status` (enum: pending | active | completed | cancelled, required)
+- `notes` (string, optional)
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| PORT | Server port | 3000 |
-| JWT_SECRET | Secret key for JWT signing | (change in production) |
-| NODE_ENV | Environment | development |
-| UPLOAD_DIR | Directory for file uploads | ./uploads |
-| MAX_FILE_SIZE | Maximum file size in bytes | 5242880 (5MB) |
+Create a `.env` file (optional):
+
+```env
+PORT=3000
+JWT_SECRET=your-secret-key-change-in-production
+NODE_ENV=development
+UPLOAD_DIR=./uploads
+MAX_FILE_SIZE=5242880
+```
+
+## Project Structure
+
+```
+src/
+├── database/          # In-memory data store
+├── middleware/        # Auth, authorization, error handling
+├── models/           # Data models & validation schemas
+├── routes/           # API route definitions
+├── services/         # Business logic & file storage
+└── utils/            # Logging & error utilities
+```
+
+## Documentation
+
+For more detailed information, see:
+- **design.md** - Architecture, data models, and design decisions
+- **API-EXAMPLES.md** - Complete API examples with sample payloads
+- **PRODUCTION-ROADMAP.md** - Future enhancements and production considerations
+
+## Testing
+
+Use the included PowerShell test scripts:
+
+```bash
+# Test all API endpoints
+.\test-api.ps1
+
+# Simple health check
+.\test-simple.ps1
+```
 
 ## License
 
