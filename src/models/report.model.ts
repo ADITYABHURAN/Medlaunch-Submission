@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-// Entry Schema
 export const EntrySchema = z.object({
   id: z.string(),
   priority: z.enum(['low', 'medium', 'high', 'critical']),
@@ -10,7 +9,6 @@ export const EntrySchema = z.object({
   notes: z.string().optional(),
 });
 
-// Attachment Schema
 export const AttachmentSchema = z.object({
   id: z.string(),
   filename: z.string(),
@@ -24,7 +22,6 @@ export const AttachmentSchema = z.object({
   tokenExpiresAt: z.string().datetime().optional(),
 });
 
-// Audit Log Entry Schema
 export const AuditLogEntrySchema = z.object({
   timestamp: z.string().datetime(),
   userId: z.string(),
@@ -34,7 +31,6 @@ export const AuditLogEntrySchema = z.object({
   metadata: z.record(z.any()).optional(),
 });
 
-// Comment Schema
 export const CommentSchema = z.object({
   id: z.string(),
   text: z.string(),
@@ -43,7 +39,6 @@ export const CommentSchema = z.object({
   updatedAt: z.string().datetime().optional(),
 });
 
-// Report Schema
 export const ReportSchema = z.object({
   id: z.string(),
   title: z.string().min(1).max(200),
@@ -61,7 +56,6 @@ export const ReportSchema = z.object({
   description: z.string().optional(),
 });
 
-// Create Report Input Schema (for POST)
 export const CreateReportSchema = z.object({
   title: z.string().min(1).max(200),
   ownerId: z.string(),
@@ -71,7 +65,6 @@ export const CreateReportSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
-// Update Report Input Schema (for PUT)
 export const UpdateReportSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   status: z.enum(['draft', 'in_progress', 'under_review', 'finalized', 'archived']).optional(),
@@ -83,7 +76,6 @@ export const UpdateReportSchema = z.object({
   force: z.boolean().optional(),
 });
 
-// TypeScript Types
 export type Entry = z.infer<typeof EntrySchema>;
 export type Attachment = z.infer<typeof AttachmentSchema>;
 export type AuditLogEntry = z.infer<typeof AuditLogEntrySchema>;
@@ -91,12 +83,3 @@ export type Comment = z.infer<typeof CommentSchema>;
 export type Report = z.infer<typeof ReportSchema>;
 export type CreateReportInput = z.infer<typeof CreateReportSchema>;
 export type UpdateReportInput = z.infer<typeof UpdateReportSchema>;
-
-// Computed fields interface
-export interface ComputedReportFields {
-  totalEntries: number;
-  completedEntries: number;
-  recentActivityCount: number;
-  highPriorityCount: number;
-  averageCompletionTime?: number;
-}

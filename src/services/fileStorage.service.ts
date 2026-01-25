@@ -17,10 +17,6 @@ class FileStorageService {
 
   constructor() {
     this.uploadDir = process.env.UPLOAD_DIR || './uploads';
-    this.ensureUploadDir();
-  }
-
-  private ensureUploadDir() {
     if (!fs.existsSync(this.uploadDir)) {
       fs.mkdirSync(this.uploadDir, { recursive: true });
       logger.info('Created upload directory', { path: this.uploadDir });
@@ -85,8 +81,6 @@ class FileStorageService {
     const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
 
     this.downloadTokens.set(token, { storageKey, expiresAt });
-
-    // Clean up expired tokens
     this.cleanupExpiredTokens();
 
     logger.info('Download token generated', {
@@ -123,13 +117,13 @@ class FileStorageService {
   }
 
   validateFile(file: Express.Multer.File): void {
-    const maxSize = parseInt(process.env.MAX_FILE_SIZE || '5242880', 10); // 5MB default
+    const maxSize = parseInt(process.env.MAX_FILE_SIZE || '5242880', 10);
     
     if (file.size > maxSize) {
       throw new AppError(400, 'FILE_TOO_LARGE', `File size exceeds maximum of ${maxSize} bytes`);
     }
 
-    const allowedMimeTypes = [
+    const allowedTypes = [
       'application/pdf',
       'image/jpeg',
       'image/png',
@@ -142,7 +136,7 @@ class FileStorageService {
       'text/csv',
     ];
 
-    if (!allowedMimeTypes.includes(file.mimetype)) {
+    if (!allowedTypes.includes(file.mimetype)) {
       throw new AppError(400, 'INVALID_FILE_TYPE', 'File type not allowed');
     }
   }

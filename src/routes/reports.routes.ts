@@ -11,7 +11,6 @@ import multer from 'multer';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// GET /reports/:id - Get a report
 router.get(
   '/:id',
   authenticate,
@@ -25,7 +24,6 @@ router.get(
         : undefined;
 
       const report = await reportService.getReportWithView(id, view, include);
-
       return res.json(report);
     } catch (error) {
       return next(error);
@@ -33,7 +31,6 @@ router.get(
   }
 );
 
-// PUT /reports/:id - Update a report
 router.put(
   '/:id',
   authenticate,
@@ -41,43 +38,32 @@ router.put(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { id } = req.params;
-
-      // Validate input
       const validated = UpdateReportSchema.parse(req.body);
-
       const updated = await reportService.updateReport(
         id,
         validated,
         req.user!.userId,
         req.user!.role
       );
-
       return res.json(updated);
     } catch (error: any) {
       if (error.name === 'ZodError') {
         return next(new AppError(400, 'VALIDATION_ERROR', 'Invalid input', error.errors));
-      } else {
-        return next(error);
       }
+      return next(error);
     }
   }
 );
 
-// POST /reports - Create a new report
 router.post(
   '/',
   authenticate,
   authorize('editor'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // Validate input
       const validated = CreateReportSchema.parse(req.body);
-
       const report = await reportService.createReport(validated, req.user!.userId);
-
-      res.status(201)
-        .location(`/reports/${report.id}`)
-        .json(report);
+      res.status(201).location(`/reports/${report.id}`).json(report);
     } catch (error: any) {
       if (error.name === 'ZodError') {
         next(new AppError(400, 'VALIDATION_ERROR', 'Invalid input', error.errors));
@@ -88,7 +74,6 @@ router.post(
   }
 );
 
-// POST /reports/:id/attachment - Upload an attachment
 router.post(
   '/:id/attachment',
   authenticate,
@@ -102,15 +87,11 @@ router.post(
         throw new AppError(400, 'NO_FILE', 'No file provided');
       }
 
-      // Validate and store file
       fileStorage.validateFile(req.file);
       const stored = await fileStorage.store(req.file);
-
-      // Generate download token
       const downloadToken = fileStorage.generateDownloadToken(stored.storageKey, 60);
       const tokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
-      // Create attachment record
       const attachment: Attachment = {
         id: uuidv4(),
         filename: stored.filename,
@@ -124,7 +105,6 @@ router.post(
         tokenExpiresAt,
       };
 
-      // Add to report
       await reportService.addAttachment(id, attachment);
 
       res.status(201).json({
@@ -137,7 +117,6 @@ router.post(
   }
 );
 
-// GET /reports/:id/attachments/:attachmentId/download - Download attachment
 router.get(
   '/:id/attachments/:attachmentId/download',
   async (req: Request, res: Response, next: NextFunction) => {
@@ -149,13 +128,11 @@ router.get(
         throw new AppError(401, 'TOKEN_REQUIRED', 'Download token required');
       }
 
-      // Validate token
       const storageKey = fileStorage.validateDownloadToken(token);
       if (!storageKey) {
         throw new AppError(401, 'INVALID_TOKEN', 'Invalid or expired download token');
       }
 
-      // Get report and verify attachment
       const report = await reportService.getReportById(id);
       const attachment = report.attachments.find((a: Attachment) => a.id === attachmentId);
 
@@ -167,7 +144,6 @@ router.get(
         throw new AppError(403, 'FORBIDDEN', 'Token does not match attachment');
       }
 
-      // Retrieve and send file
       const fileBuffer = await fileStorage.retrieve(storageKey);
 
       res.setHeader('Content-Type', attachment.mimeType);

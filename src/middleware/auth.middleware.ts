@@ -11,7 +11,6 @@ declare global {
   }
 }
 
-// Check if user has valid JWT token
 export const authenticate = (req: Request, _res: Response, next: NextFunction) => {
   try {
     const authHeader = req.headers.authorization;

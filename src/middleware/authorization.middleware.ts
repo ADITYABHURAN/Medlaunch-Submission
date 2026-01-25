@@ -3,7 +3,6 @@ import { AppError } from '../utils/errors';
 
 type Role = 'reader' | 'editor';
 
-// Check if user has required role
 export const authorize = (...allowedRoles: Role[]) => {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {

@@ -18,12 +18,10 @@ export class AppError extends Error {
   ) {
     super(message);
     this.name = 'AppError';
-    Error.captureStackTrace(this, this.constructor);
   }
 }
 
-export const formatErrorResponse = (
-  _statusCode: number,
+const formatErrorResponse = (
   code: string,
   message: string,
   requestId?: string,
@@ -42,12 +40,11 @@ export const formatErrorResponse = (
 export const handleError = (err: Error, req: Request, res: Response) => {
   if (err instanceof AppError) {
     return res.status(err.statusCode).json(
-      formatErrorResponse(err.statusCode, err.code, err.message, req.id, err.details)
+      formatErrorResponse(err.code, err.message, req.id, err.details)
     );
   }
 
-  // Default to 500 for unknown errors
   return res.status(500).json(
-    formatErrorResponse(500, 'INTERNAL_ERROR', 'An unexpected error occurred', req.id)
+    formatErrorResponse('INTERNAL_ERROR', 'An unexpected error occurred', req.id)
   );
 };

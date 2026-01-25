@@ -4,9 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 
 class InMemoryDatabase {
   private reports: Map<string, Report> = new Map();
-  private businessKeyIndex: Map<string, string> = new Map(); // Maps "title:ownerId" -> reportId
+  private businessKeyIndex: Map<string, string> = new Map();
 
-  // Create a new report
   create(report: Omit<Report, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'entries' | 'comments' | 'attachments' | 'auditLog'>): Report {
     const businessKey = this.getBusinessKey(report.title, report.ownerId);
     
@@ -34,19 +33,15 @@ class InMemoryDatabase {
     return newReport;
   }
 
-  // Get report by ID
   getById(id: string): Report | undefined {
     return this.reports.get(id);
   }
 
-  // Update report
   update(id: string, updates: Partial<Report>): Report {
     const existing = this.reports.get(id);
     if (!existing) {
       throw new AppError(404, 'REPORT_NOT_FOUND', 'Report not found');
     }
-
-    // Check if title or ownerId changed, update business key index
     if (updates.title || updates.ownerId) {
       const oldBusinessKey = this.getBusinessKey(existing.title, existing.ownerId);
       const newTitle = updates.title || existing.title;
@@ -75,7 +70,6 @@ class InMemoryDatabase {
     return updated;
   }
 
-  // Delete report
   delete(id: string): boolean {
     const report = this.reports.get(id);
     if (!report) {
@@ -87,17 +81,14 @@ class InMemoryDatabase {
     return this.reports.delete(id);
   }
 
-  // Get all reports (for debugging)
   getAll(): Report[] {
     return Array.from(this.reports.values());
   }
 
-  // Helper to create business key
   private getBusinessKey(title: string, ownerId: string): string {
     return `${title.toLowerCase()}:${ownerId}`;
   }
 
-  // Clear all data (for testing)
   clear(): void {
     this.reports.clear();
     this.businessKeyIndex.clear();

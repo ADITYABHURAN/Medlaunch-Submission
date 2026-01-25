@@ -4,11 +4,6 @@ import { JWTPayload } from '../models/user.model';
 
 const router = Router();
 
-/**
- * POST /auth/token
- * Generate a JWT token for testing
- * In production, this would validate credentials against a user database
- */
 router.post('/token', (req: Request, res: Response) => {
   const { username, role } = req.body;
 
