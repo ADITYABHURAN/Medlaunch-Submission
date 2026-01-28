@@ -49,6 +49,8 @@ curl -X POST http://localhost:3000/auth/token \
   -d "{\"username\": \"reader_user\", \"role\": \"reader\"}"
 ```
 
+
+
 **Response:**
 ```json
 {
